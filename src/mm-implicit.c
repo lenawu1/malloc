@@ -96,7 +96,7 @@ void *mm_malloc(size_t size) {
     if (mm_heap_last != NULL) {
         while (prev < mm_heap_last) {
             block_t *next = (void *) prev + get_size(prev);
-            if (next <= mm_heap_last && !is_allocated(next)) {
+            if (next <= mm_heap_last && !is_allocated(prev) && !is_allocated(next)) {
                 set_header(prev, get_size(prev) + get_size(next), false);
             }
             prev = (void *) prev + get_size(prev);
