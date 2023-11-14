@@ -6,6 +6,7 @@
  */
 
 #include <stdint.h>
+#include <string.h>
 
 #include "memlib.h"
 #include "mm.h"
@@ -54,10 +55,9 @@ static bool is_allocated(block_t *block) {
  * If no block is large enough, returns NULL.
  */
 static block_t *find_fit(size_t size) {
-    // Traverse the blocks in the heap using the implicit list
-    for (block_t *curr = mm_heap_first; mm_heap_last != NULL && curr <= mm_heap_last;
-         curr = (void *) curr + get_size(curr)) {
-        // If the block is free and large enough for the allocation, return it
+    for (block_t *curr = mm_heap_first; mm_heap_last != NULL && curr <= mm_heap_last; 
+        curr = (void *) curr + get_size(curr)) 
+        {
         if (!is_allocated(curr) && get_size(curr) >= size) {
             return curr;
         }
@@ -93,10 +93,31 @@ void *mm_malloc(size_t size) {
     // The block must have enough space for a header and be 16-byte aligned
     size = round_up(sizeof(block_t) + size, ALIGNMENT);
 
-    // If there is a large enough free block, use it
+    block_t *prev = mm_heap_first;
+    if (mm_heap_last != NULL)
+    {
+        while(prev < mm_heap_last)
+        {
+            block_t *next = (void *) prev + get_size(prev);
+            if (next <= mm_heap_last && !is_allocated(next)){
+                set_header(prev, get_size(prev) + get_size(next), false);
+            }
+            prev = (void *) prev + get_size(prev);
+        }
+    }
+
     block_t *block = find_fit(size);
     if (block != NULL) {
-        set_header(block, get_size(block), true);
+        size_t block_size = get_size(block);
+        if (block_size > size) {
+            // Split the block
+            set_header(block, size, true);
+            block_t *remaining_block = (void *)block + size;
+            set_header(remaining_block, block_size - size, false);
+        } else {
+            // Use the whole block without splitting
+            set_header(block, block_size, true);
+        }
         return block->payload;
     }
 
@@ -136,18 +157,43 @@ void mm_free(void *ptr) {
  *      copying its data, and mm_freeing the old block.
  */
 void *mm_realloc(void *old_ptr, size_t size) {
-    (void) old_ptr;
-    (void) size;
-    return NULL;
+    if (old_ptr == NULL) {
+        return mm_malloc(size);
+    }
+
+    if (size == 0) {
+        mm_free(old_ptr);
+        return NULL;
+    }
+
+    block_t *old_block = block_from_payload(old_ptr);
+    size_t old_size = get_size(old_block); 
+    size_t tot_size = round_up(sizeof(block_t) + size, ALIGNMENT);
+
+    if(old_size == tot_size){
+        return old_ptr;
+    }
+    void *new_ptr = mm_malloc(size);
+    if(tot_size > old_size){
+        memcpy(new_ptr, old_ptr, old_size);
+    }
+    else{
+        memcpy(new_ptr, old_ptr, size);
+    }
+    mm_free(old_ptr);
+    return new_ptr;
 }
 
 /**
  * mm_calloc - Allocate the block and set it to zero.
  */
 void *mm_calloc(size_t nmemb, size_t size) {
-    (void) nmemb;
-    (void) size;
-    return NULL;
+    size_t total_size = nmemb * size;
+    void *ptr = mm_malloc(total_size);
+    if (ptr != NULL) {
+        memset(ptr, 0, total_size);
+    }
+    return ptr;
 }
 
 /**
