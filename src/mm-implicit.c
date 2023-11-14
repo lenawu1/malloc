@@ -55,9 +55,8 @@ static bool is_allocated(block_t *block) {
  * If no block is large enough, returns NULL.
  */
 static block_t *find_fit(size_t size) {
-    for (block_t *curr = mm_heap_first; mm_heap_last != NULL && curr <= mm_heap_last; 
-        curr = (void *) curr + get_size(curr)) 
-        {
+    for (block_t *curr = mm_heap_first; mm_heap_last != NULL && curr <= mm_heap_last;
+         curr = (void *) curr + get_size(curr)) {
         if (!is_allocated(curr) && get_size(curr) >= size) {
             return curr;
         }
@@ -94,12 +93,10 @@ void *mm_malloc(size_t size) {
     size = round_up(sizeof(block_t) + size, ALIGNMENT);
 
     block_t *prev = mm_heap_first;
-    if (mm_heap_last != NULL)
-    {
-        while(prev < mm_heap_last)
-        {
+    if (mm_heap_last != NULL) {
+        while (prev < mm_heap_last) {
             block_t *next = (void *) prev + get_size(prev);
-            if (next <= mm_heap_last && !is_allocated(next)){
+            if (next <= mm_heap_last && !is_allocated(next)) {
                 set_header(prev, get_size(prev) + get_size(next), false);
             }
             prev = (void *) prev + get_size(prev);
@@ -112,9 +109,10 @@ void *mm_malloc(size_t size) {
         if (block_size > size) {
             // Split the block
             set_header(block, size, true);
-            block_t *remaining_block = (void *)block + size;
+            block_t *remaining_block = (void *) block + size;
             set_header(remaining_block, block_size - size, false);
-        } else {
+        }
+        else {
             // Use the whole block without splitting
             set_header(block, block_size, true);
         }
@@ -167,17 +165,17 @@ void *mm_realloc(void *old_ptr, size_t size) {
     }
 
     block_t *old_block = block_from_payload(old_ptr);
-    size_t old_size = get_size(old_block); 
+    size_t old_size = get_size(old_block);
     size_t tot_size = round_up(sizeof(block_t) + size, ALIGNMENT);
 
-    if(old_size == tot_size){
+    if (old_size == tot_size) {
         return old_ptr;
     }
     void *new_ptr = mm_malloc(size);
-    if(tot_size > old_size){
+    if (tot_size > old_size) {
         memcpy(new_ptr, old_ptr, old_size);
     }
-    else{
+    else {
         memcpy(new_ptr, old_ptr, size);
     }
     mm_free(old_ptr);
