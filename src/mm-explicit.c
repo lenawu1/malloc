@@ -278,11 +278,12 @@ void *mm_calloc(size_t nmemb, size_t size) {
  */
 void mm_checkheap(void) {
     free_block_t *block = head_block;
-    while(head_block != NULL){
+    while (block != NULL) {
         size_t footer = ((size_t *) block)[-1];
-        if((!(footer & 1) && is_allocated((block_t *) (block))) || ((footer & 1) && !is_allocated((block_t *) block))) {
-                printf("mismatch bw header and footer allocation states\n");
-            }
-            block = block->next;
+        if ((!(footer & 1) && is_allocated((block_t *) (block))) ||
+            ((footer & 1) && !is_allocated((block_t *) block))) {
+            printf("mismatch bw header and footer allocation states\n");
+        }
+        block = block->next;
     }
 }
