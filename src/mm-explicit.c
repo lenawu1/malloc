@@ -277,4 +277,12 @@ void *mm_calloc(size_t nmemb, size_t size) {
  * mm_checkheap - So simple, it doesn't need a checker!
  */
 void mm_checkheap(void) {
+    free_block_t *block = head_block;
+    while(head_block != NULL){
+        size_t footer = ((size_t *) block)[-1];
+        if((!(footer & 1) && is_allocated((block_t *) (block))) || ((footer & 1) && !is_allocated((block_t *) block))) {
+                printf("mismatch bw header and footer allocation states\n");
+            }
+            block = block->next;
+    }
 }
