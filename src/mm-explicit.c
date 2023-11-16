@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "memlib.h"
 #include "mm.h"
@@ -25,18 +26,67 @@ typedef struct {
     uint8_t payload[];
 } block_t;
 
+/** The layout of each unallocated block*/
+typedef struct {
+    size_t header;
+    void *prev;
+    void *next;
+} free_block_t;
+
 /** The first and last blocks on the heap */
 static block_t *mm_heap_first = NULL;
 static block_t *mm_heap_last = NULL;
+
+static free_block_t *head_block = NULL;
+static free_block_t *tail_block = NULL;
 
 /** Rounds up `size` to the nearest multiple of `n` */
 static size_t round_up(size_t size, size_t n) {
     return (size + (n - 1)) / n * n;
 }
 
-/** Set's a block's header with the given size and allocation state */
+/** Set's a block's header&footer with the given size and allocation state */
 static void set_header(block_t *block, size_t size, bool is_allocated) {
     block->header = size | is_allocated;
+    size_t *footer = (size_t *)((void *) block + size);
+    footer[-1] = block -> header;
+}
+
+void add_node (free_block_t *node){
+    if (tail_block == NULL)
+    {
+        node->next = NULL;
+        node->prev = NULL;
+        head_block = node;
+        tail_block = node;
+    }
+    else{
+        node->next = head_block;
+        node->prev = NULL;
+        head_block->prev = node;
+        head_block = node;
+    }
+}
+
+void remove_node(free_block_t *node){
+    if(node == head_block && node == tail_block){
+        head_block = NULL;
+        tail_block = NULL;
+    }
+    else if (node == head_block){
+        head_block = node->next;
+        head_block->prev = NULL;
+        node->next = NULL;
+    }
+    else if (node == tail_block){
+        tail_block = node->prev;
+        tail_block->next = NULL;
+        node->prev = NULL;
+    }
+    else{
+        ((free_block_t *) node->prev)->next = node->next;
+        ((free_block_t *) node->next)->prev = node->prev;
+    }
 }
 
 /** Extracts a block's size from its header */
@@ -54,13 +104,17 @@ static bool is_allocated(block_t *block) {
  * If no block is large enough, returns NULL.
  */
 static block_t *find_fit(size_t size) {
+    if(head_block == NULL){
+        return NULL;
+    }
+    free_block_t *block = head_block;
     // Traverse the blocks in the heap using the implicit list
-    for (block_t *curr = mm_heap_first; mm_heap_last != NULL && curr <= mm_heap_last;
-         curr = (void *) curr + get_size(curr)) {
+    while (block != NULL){
         // If the block is free and large enough for the allocation, return it
-        if (!is_allocated(curr) && get_size(curr) >= size) {
-            return curr;
+        if (size <= get_size((block_t *) block)) {
+            return (block_t *) block;
         }
+        block = block->next;
     }
     return NULL;
 }
@@ -83,6 +137,8 @@ bool mm_init(void) {
     // Initialize the heap with no blocks
     mm_heap_first = NULL;
     mm_heap_last = NULL;
+    head_block = NULL;
+    tail_block = NULL;
     return true;
 }
 
@@ -91,29 +147,27 @@ bool mm_init(void) {
  */
 void *mm_malloc(size_t size) {
     // The block must have enough space for a header and be 16-byte aligned
-    size = round_up(sizeof(block_t) + size, ALIGNMENT);
-    block_t *prev = mm_heap_first;
-    if (mm_heap_last != NULL) {
-        while (prev < mm_heap_last) {
-            block_t *next = (void *) prev + get_size(prev);
-            if (next <= mm_heap_last && !is_allocated(prev) && !is_allocated(next)) {
-                set_header(prev, get_size(prev) + get_size(next), false);
-            }
-            prev = (void *) prev + get_size(prev);
-        }
+    size = round_up(sizeof(block_t) + size + sizeof(size_t), ALIGNMENT);
+    if (size < 2*ALIGNMENT){
+        size = 2*ALIGNMENT;
     }
     block_t *block = find_fit(size);
-    if (block != NULL) {
-        size_t block_size = get_size(block);
-        if (block_size > size) {
+    size_t block_size = get_size(block);
+    if (block != NULL && !is_allocated(block)) {
+        remove_node((free_block_t *) block);
+        if (block_size >= size + 2 * ALIGNMENT) {
             // Split the block
+            block_t *new_block = (void *) block + size;
+            set_header(new_block, block_size - size, false);
             set_header(block, size, true);
-            block_t *remaining_block = (void *) block + size;
-            set_header(remaining_block, block_size - size, false);
+            add_node((free_block_t *) new_block);
+            if(block == mm_heap_last){
+                mm_heap_last = new_block;
+            }
         }
         else {
             // Use the whole block without splitting
-            set_header(block, block_size, true);
+            set_header(block, get_size(block), true);
         }
         return block->payload;
     }
@@ -147,6 +201,33 @@ void mm_free(void *ptr) {
     // Mark the block as unallocated
     block_t *block = block_from_payload(ptr);
     set_header(block, get_size(block), false);
+    bool isMerged = false;
+
+    if (block != mm_heap_first) {
+        size_t leftFooter = ((size_t *) block)[-1];
+        block_t *leftBlock = (void *) block - (leftFooter & ~1);
+        if (!(leftFooter & 1)) {
+            isMerged = true;
+            set_header(leftBlock, get_size(leftBlock) + get_size(block), false);
+            if (block == mm_heap_last) {
+                mm_heap_last = leftBlock;
+            }
+            block = leftBlock;
+        }
+    }
+    if (block != mm_heap_last) {
+        block_t *rightBlock = (void *) block + get_size(block);
+        if (!is_allocated(rightBlock)) {
+            remove_node((free_block_t *) rightBlock);
+            set_header(block, get_size(block) + get_size(rightBlock), false);
+            if (rightBlock == mm_heap_last) {
+                mm_heap_last = block;
+            }
+        }
+    }
+    if (!isMerged) {
+        add_node((free_block_t *) block);
+    }
 }
 
 /**
@@ -165,7 +246,7 @@ void *mm_realloc(void *old_ptr, size_t size) {
 
     block_t *old_block = block_from_payload(old_ptr);
     size_t old_size = get_size(old_block);
-    size_t tot_size = round_up(sizeof(block_t) + size, ALIGNMENT);
+    size_t tot_size = round_up(sizeof(block_t) + sizeof(size_t) + size, ALIGNMENT);
 
     if (old_size == tot_size) {
         return old_ptr;
