@@ -196,35 +196,33 @@ void mm_free(void *ptr) {
     if (ptr == NULL) {
         return;
     }
-
     // Mark the block as unallocated
     block_t *block = block_from_payload(ptr);
     set_header(block, get_size(block), false);
-    bool isMerged = false;
-
+    bool is_merged = false;
     if (block != mm_heap_first) {
-        size_t leftFooter = ((size_t *) block)[-1];
-        block_t *leftBlock = (void *) block - (leftFooter & ~1);
-        if (!(leftFooter & 1)) {
-            isMerged = true;
-            set_header(leftBlock, get_size(leftBlock) + get_size(block), false);
+        size_t left_footer = ((size_t *) block)[-1];
+        block_t *left_block = (void *) block - (left_footer & ~1);
+        if (!(left_footer & 1)) {
+            is_merged = true;
+            set_header(left_block, get_size(left_block) + get_size(block), false);
             if (block == mm_heap_last) {
-                mm_heap_last = leftBlock;
+                mm_heap_last = left_block;
             }
-            block = leftBlock;
+            block = left_block;
         }
     }
     if (block != mm_heap_last) {
-        block_t *rightBlock = (void *) block + get_size(block);
-        if (!is_allocated(rightBlock)) {
-            remove_node((free_block_t *) rightBlock);
-            set_header(block, get_size(block) + get_size(rightBlock), false);
-            if (rightBlock == mm_heap_last) {
+        block_t *right_block = (void *) block + get_size(block);
+        if (!is_allocated(right_block)) {
+            remove_node((free_block_t *) right_block);
+            set_header(block, get_size(block) + get_size(right_block), false);
+            if (right_block == mm_heap_last) {
                 mm_heap_last = block;
             }
         }
     }
-    if (!isMerged) {
+    if (!is_merged) {
         add_node((free_block_t *) block);
     }
 }
@@ -237,16 +235,13 @@ void *mm_realloc(void *old_ptr, size_t size) {
     if (old_ptr == NULL) {
         return mm_malloc(size);
     }
-
     if (size == 0) {
         mm_free(old_ptr);
         return NULL;
     }
-
     block_t *old_block = block_from_payload(old_ptr);
     size_t old_size = get_size(old_block);
     size_t tot_size = round_up(sizeof(block_t) + sizeof(size_t) + size, ALIGNMENT);
-
     if (old_size == tot_size) {
         return old_ptr;
     }

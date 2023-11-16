@@ -111,11 +111,9 @@ void *mm_malloc(size_t size) {
             set_header(block, size, true);
             block_t *remaining_block = (void *) block + size;
             set_header(remaining_block, block_size - size, false);
+            return block->payload;
         }
-        else {
-            // Use the whole block without splitting
-            set_header(block, block_size, true);
-        }
+        set_header(block, get_size(block), true);
         return block->payload;
     }
 
