@@ -5,8 +5,8 @@
  */
 
 #include <stdint.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "memlib.h"
 #include "mm.h"
@@ -48,19 +48,18 @@ static size_t round_up(size_t size, size_t n) {
 /** Set's a block's header&footer with the given size and allocation state */
 static void set_header(block_t *block, size_t size, bool is_allocated) {
     block->header = size | is_allocated;
-    size_t *footer = (size_t *)((void *) block + size);
-    footer[-1] = block -> header;
+    size_t *footer = (size_t *) ((void *) block + size);
+    footer[-1] = block->header;
 }
 
-void add_node (free_block_t *node){
-    if (tail_block == NULL)
-    {
+void add_node(free_block_t *node) {
+    if (tail_block == NULL) {
         node->next = NULL;
         node->prev = NULL;
         head_block = node;
         tail_block = node;
     }
-    else{
+    else {
         node->next = head_block;
         node->prev = NULL;
         head_block->prev = node;
@@ -68,22 +67,22 @@ void add_node (free_block_t *node){
     }
 }
 
-void remove_node(free_block_t *node){
-    if(node == head_block && node == tail_block){
+void remove_node(free_block_t *node) {
+    if (node == head_block && node == tail_block) {
         head_block = NULL;
         tail_block = NULL;
     }
-    else if (node == head_block){
+    else if (node == head_block) {
         head_block = node->next;
         head_block->prev = NULL;
         node->next = NULL;
     }
-    else if (node == tail_block){
+    else if (node == tail_block) {
         tail_block = node->prev;
         tail_block->next = NULL;
         node->prev = NULL;
     }
-    else{
+    else {
         ((free_block_t *) node->prev)->next = node->next;
         ((free_block_t *) node->next)->prev = node->prev;
     }
@@ -104,12 +103,12 @@ static bool is_allocated(block_t *block) {
  * If no block is large enough, returns NULL.
  */
 static block_t *find_fit(size_t size) {
-    if(head_block == NULL){
+    if (head_block == NULL) {
         return NULL;
     }
     free_block_t *block = head_block;
     // Traverse the blocks in the heap using the implicit list
-    while (block != NULL){
+    while (block != NULL) {
         // If the block is free and large enough for the allocation, return it
         if (size <= get_size((block_t *) block)) {
             return (block_t *) block;
@@ -148,8 +147,8 @@ bool mm_init(void) {
 void *mm_malloc(size_t size) {
     // The block must have enough space for a header and be 16-byte aligned
     size = round_up(sizeof(block_t) + size + sizeof(size_t), ALIGNMENT);
-    if (size < 2*ALIGNMENT){
-        size = 2*ALIGNMENT;
+    if (size < 2 * ALIGNMENT) {
+        size = 2 * ALIGNMENT;
     }
     block_t *block = find_fit(size);
     size_t block_size = get_size(block);
@@ -161,7 +160,7 @@ void *mm_malloc(size_t size) {
             set_header(new_block, block_size - size, false);
             set_header(block, size, true);
             add_node((free_block_t *) new_block);
-            if(block == mm_heap_last){
+            if (block == mm_heap_last) {
                 mm_heap_last = new_block;
             }
         }
