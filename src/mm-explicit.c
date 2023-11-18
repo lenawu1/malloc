@@ -53,34 +53,33 @@ static void set_header(block_t *block, size_t size, bool is_allocated) {
 }
 
 void add_node(free_block_t *node) {
+    node->next = head_block;
+    node->prev = NULL;
     if (tail_block == NULL) {
-        node->next = NULL;
-        node->prev = NULL;
-        head_block = node;
         tail_block = node;
     }
     else {
-        node->next = head_block;
-        node->prev = NULL;
-        head_block->prev = node;
-        head_block = node;
+        ((free_block_t *) node->next) -> prev = node;
     }
+    head_block = node;
 }
 
 void remove_node(free_block_t *node) {
-    if (node == head_block && node == tail_block) {
+    if (head_block == NULL)
+    {
+        return;
+    }
+    if (head_block == tail_block) {
         head_block = NULL;
         tail_block = NULL;
     }
     else if (node == head_block) {
         head_block = node->next;
         head_block->prev = NULL;
-        node->next = NULL;
     }
     else if (node == tail_block) {
         tail_block = node->prev;
         tail_block->next = NULL;
-        node->prev = NULL;
     }
     else {
         ((free_block_t *) node->prev)->next = node->next;
@@ -103,9 +102,6 @@ static bool is_allocated(block_t *block) {
  * If no block is large enough, returns NULL.
  */
 static block_t *find_fit(size_t size) {
-    if (head_block == NULL) {
-        return NULL;
-    }
     free_block_t *block = head_block;
     // Traverse the blocks in the heap using the implicit list
     while (block != NULL) {
@@ -151,18 +147,17 @@ void *mm_malloc(size_t size) {
         size = 2 * ALIGNMENT;
     }
     block_t *block = find_fit(size);
-    size_t block_size = get_size(block);
     if (block != NULL && !is_allocated(block)) {
         remove_node((free_block_t *) block);
-        if (block_size >= size + 2 * ALIGNMENT) {
+        if (get_size(block) >= size + 2 * ALIGNMENT) {
             // Split the block
             block_t *new_block = (void *) block + size;
-            set_header(new_block, block_size - size, false);
+            set_header(new_block, get_size(block) - size, false);
             set_header(block, size, true);
-            add_node((free_block_t *) new_block);
             if (block == mm_heap_last) {
                 mm_heap_last = new_block;
             }
+            add_node((free_block_t *) new_block);
         }
         else {
             // Use the whole block without splitting
@@ -235,25 +230,21 @@ void *mm_realloc(void *old_ptr, size_t size) {
     if (old_ptr == NULL) {
         return mm_malloc(size);
     }
-    if (size == 0) {
+    else if (size == 0) {
         mm_free(old_ptr);
         return NULL;
     }
-    block_t *old_block = block_from_payload(old_ptr);
-    size_t old_size = get_size(old_block);
-    size_t tot_size = round_up(sizeof(block_t) + sizeof(size_t) + size, ALIGNMENT);
-    if (old_size == tot_size) {
-        return old_ptr;
-    }
-    void *new_ptr = mm_malloc(size);
-    if (tot_size > old_size) {
-        memcpy(new_ptr, old_ptr, old_size);
-    }
-    else {
+    else{
+        block_t *old_block = block_from_payload(old_ptr);
+        size_t min = size;
+        if (get_size(old_block) - sizeof(size_t) < min){
+            min = get_size(old_block) - sizeof(size_t);
+        }
+        void *new_ptr = mm_malloc(size);
         memcpy(new_ptr, old_ptr, size);
+        mm_free(old_ptr);
+        return new_ptr;
     }
-    mm_free(old_ptr);
-    return new_ptr;
 }
 
 /**
